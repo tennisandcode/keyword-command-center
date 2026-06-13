@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  asin      String   @id
+  title     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  keywords  Keyword[]
+
+  @@map("products")
+}
+
+model Run {
+  id        Int       @id @default(autoincrement())
+  asin      String
+  startedAt DateTime  @map("started_at")
+  snapshots KeywordSnapshot[]
+  competitors Competitor[]
+
+  @@map("runs")
+}
+
+model Keyword {
+  id             Int      @id @default(autoincrement())
+  asin           String
+  keyword        String
+  classification String   // high_opportunity | standard
+  status         String   @default("new") // new | tracking | ranking | won | dropped
+  product        Product  @relation(fields: [asin], references: [asin])
+  snapshots      KeywordSnapshot[]
+  todos          Todo[]
+
+  @@unique([asin, keyword])
+  @@map("keywords")
+}
+
+model KeywordSnapshot {
+  id           Int     @id @default(autoincrement())
+  keywordId    Int     @map("keyword_id")
+  runId        Int     @map("run_id")
+  searchVolume Int     @map("search_volume")
+  organicRank  Int     @map("organic_rank")
+  cerebroIq    Int?    @map("cerebro_iq")
+  titleDensity Int?    @map("title_density")
+  keywordRef   Keyword @relation(fields: [keywordId], references: [id])
+  run          Run     @relation(fields: [runId], references: [id])
+
+  @@map("keyword_snapshots")
+}
+
+model Todo {
+  id        Int      @id @default(autoincrement())
+  keywordId Int      @map("keyword_id")
+  action    String
+  priority  String   // high | medium
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  keyword   Keyword  @relation(fields: [keywordId], references: [id])
+
+  @@unique([keywordId, action])
+  @@map("todos")
+}
+
+model Competitor {
+  id          Int    @id @default(autoincrement())
+  runId       Int    @map("run_id")
+  keyword     String
+  position    Int
+  asin        String
+  title       String
+  price       String?
+  rating      String?
+  reviewCount String? @map("review_count")
+  run         Run    @relation(fields: [runId], references: [id])
+
+  @@map("competitors")
+}
