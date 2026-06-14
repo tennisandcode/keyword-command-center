@@ -16,16 +16,66 @@
         "prefill": ["B0DDQL7PVM"],
         "description": "One or more ASINs. If empty, the actor fetches active products from the portal API."
       },
-      "minSearchVolume": { "title": "Min search volume", "type": "integer", "default": 400 },
-      "rankMin": { "title": "Organic rank min", "type": "integer", "default": 20 },
-      "rankMax": { "title": "Organic rank max", "type": "integer", "default": 80 },
-      "highOppVolume": { "title": "High-opportunity volume threshold", "type": "integer", "default": 800 },
-      "highOppRankMax": { "title": "High-opportunity rank max", "type": "integer", "default": 50 },
-      "maxKeywords": { "title": "Max keywords per ASIN", "type": "integer", "default": 150 },
-      "maxCompetitorLookups": { "title": "Max competitor lookups per ASIN", "type": "integer", "default": 3 },
-      "deepCompetitors": { "title": "Deep competitor X-ray (visit product pages)", "type": "boolean", "default": true },
-      "weeklyPpcBudget": { "title": "Weekly PPC budget ($) for plan allocation", "type": "integer", "default": 500 },
-      "productPrice": { "title": "Your product price (cost-to-rank math)", "type": "integer", "default": 149 },
+      "minSearchVolume": {
+        "title": "Min search volume",
+        "type": "integer",
+        "default": 400,
+        "description": "Ignore keywords whose Cerebro search volume is below this."
+      },
+      "rankMin": {
+        "title": "Organic rank min",
+        "type": "integer",
+        "default": 20,
+        "description": "Lower bound of the organic-rank window to keep (keywords where you already rank highly are excluded)."
+      },
+      "rankMax": {
+        "title": "Organic rank max",
+        "type": "integer",
+        "default": 80,
+        "description": "Upper bound of the organic-rank window to keep (keywords you rank too poorly for are excluded)."
+      },
+      "highOppVolume": {
+        "title": "High-opportunity volume threshold",
+        "type": "integer",
+        "default": 800,
+        "description": "Keywords at or above this volume can be flagged high_opportunity."
+      },
+      "highOppRankMax": {
+        "title": "High-opportunity rank max",
+        "type": "integer",
+        "default": 50,
+        "description": "Keywords ranking at or better than this position can be flagged high_opportunity."
+      },
+      "maxKeywords": {
+        "title": "Max keywords per ASIN",
+        "type": "integer",
+        "default": 150,
+        "description": "Cap on keywords stored per ASIN per run."
+      },
+      "maxCompetitorLookups": {
+        "title": "Max competitor lookups per ASIN",
+        "type": "integer",
+        "default": 3,
+        "description": "How many competing ASINs to X-ray per ASIN."
+      },
+      "deepCompetitors": {
+        "title": "Deep competitor X-ray (visit product pages)",
+        "type": "boolean",
+        "default": true,
+        "description": "When on, visit competitor product pages for richer data (slower)."
+      },
+      "weeklyPpcBudget": {
+        "title": "Weekly PPC budget ($) for plan allocation",
+        "type": "integer",
+        "default": 500,
+        "description": "Budget used by the PPC plan generator to allocate spend across keywords."
+      },
+      "productPrice": {
+        "title": "Your product price (cost-to-rank math)",
+        "type": "integer",
+        "default": 149,
+        "description": "Your product's price, used in the cost-to-rank and ROI calculations."
+      },
       "loginWaitMinutes": {
         "title": "Login handoff wait (minutes)",
         "type": "integer",
@@ -36,6 +86,7 @@
         "title": "Branded terms to exclude",
         "type": "array",
         "editor": "stringList",
+        "description": "Branded/competitor terms to drop from results.",
         "prefill": ["nobl", "cotopaxi", "northface", "north face", "crocs", "thule", "tomtoc", "alming", "ryanair", "jansport", "swissgear", "matein", "lovevook", "taygeer", "bange", "vacbird"]
       }
     }
