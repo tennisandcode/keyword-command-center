@@ -48,18 +48,22 @@ await Actor.main(async () => {
   const storageState = (await sessionStore.getValue('storageState')) ?? undefined;
 
   // Headful Google Chrome under xvfb so the attended Helium 10 login works in
-  // Apify Live View. Raw Playwright (not Crawlee's incognito-wrapped browser)
-  // so newContext({ storageState }) can restore the saved session.
-  const browser = await chromium.launch({
+  // Apify Live View. A SINGLE persistent context (one window, one cookie
+  // profile) so the page the operator logs into is the same one we monitor.
+  const context = await chromium.launchPersistentContext('', {
     channel: 'chrome',
     headless: false,
+    viewport: { width: 1920, height: 1080 },
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
   startLiveView(); // serve noVNC so a human can complete the H10 login in Live View
-  const context = await browser.newContext({ storageState });
-  const page = await context.newPage();
+  // Restore a saved session (cookies) so logged-in runs skip the login entirely.
+  if (storageState?.cookies?.length) {
+    await context.addCookies(storageState.cookies).catch(() => {});
+  }
+  const page = context.pages()[0] ?? (await context.newPage());
 
-  const loggedIn = await ensureLoggedIn(page, { loginWaitMinutes });
+  const loggedIn = await ensureLoggedIn(context, page, { loginWaitMinutes });
   if (!loggedIn) {
     await Actor.setStatusMessage('NEEDS_LOGIN: open Live View and sign in.');
     throw new Error(`H10 session expired; no login within ${loginWaitMinutes} min.`);
@@ -143,7 +147,7 @@ await Actor.main(async () => {
   }
 
   if (pg) await pg.end();
-  await browser.close();
+  await context.close();
 
   if (process.env.PORTAL_URL) {
     await fetch(`${process.env.PORTAL_URL}/api/runs/ingest`, {

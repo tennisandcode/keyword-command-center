@@ -10,7 +10,7 @@ const CEREBRO_URL = 'https://members.helium10.com/cerebro';
  */
 const SIGNIN_URL = 'https://members.helium10.com/user/signin';
 
-export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
+export async function ensureLoggedIn(context, page, { loginWaitMinutes = 10 } = {}) {
   await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(4000);
 
@@ -39,9 +39,13 @@ export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
   const deadline = Date.now() + loginWaitMinutes * 60_000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(5_000);
-    const url = page.url();
-    if (!/\/user\/signin/.test(url)) {
-      // The human left the signin page (submitted successfully) — confirm Cerebro.
+    // Did any tab in this context reach a logged-in H10 page (left the signin)?
+    const loggedInSomewhere = context.pages().some((p) => {
+      const u = p.url();
+      return /helium10\.com/.test(u) && !/\/user\/signin/.test(u) && !/about:blank/.test(u);
+    });
+    if (loggedInSomewhere) {
+      // Confirm on our page (shares the persistent context's cookies).
       await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
       await page.waitForTimeout(3_000);
       if ((await sessionState(page)) === 'ok') {

@@ -1,10 +1,11 @@
 import { prisma } from '../lib/db';
 import RunButton from '../components/RunButton';
+import { h10SessionStatus } from '../lib/h10';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
-  const [productList, openTodos, highOpp, latestRun] = await Promise.all([
+  const [productList, openTodos, highOpp, latestRun, h10] = await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       select: { asin: true, title: true },
@@ -17,11 +18,13 @@ export default async function Dashboard() {
       take: 20,
     }),
     prisma.run.findFirst({ orderBy: { startedAt: 'desc' } }),
+    h10SessionStatus(),
   ]);
   const products = productList.length;
 
   return (
     <>
+      <H10Badge status={h10} />
       <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
         <Stat label="Active products" value={products} />
         <Stat label="Open to-dos" value={openTodos} />
@@ -65,6 +68,28 @@ export default async function Dashboard() {
         </tbody>
       </table>
     </>
+  );
+}
+
+function H10Badge({ status }) {
+  const ok = status?.connected;
+  const when = ok && status.savedAt ? `${new Date(status.savedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC` : null;
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', marginBottom: 16,
+        borderRadius: 8, fontSize: 13,
+        background: ok ? '#ecfdf3' : '#fef3f2',
+        border: `1px solid ${ok ? '#abefc6' : '#fecdca'}`,
+        color: ok ? '#067647' : '#b42318',
+      }}
+    >
+      <span style={{ width: 9, height: 9, borderRadius: 99, background: ok ? '#16a34a' : '#d92d20' }} />
+      <strong>Helium 10:</strong>
+      {ok
+        ? <span>Connected — session saved{when ? ` (${when})` : ''}. Runs reuse it; no login needed.</span>
+        : <span>Not connected — start a run and sign in once via Live View to save the session.</span>}
+    </div>
   );
 }
 
