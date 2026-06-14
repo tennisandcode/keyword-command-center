@@ -4,8 +4,12 @@ import RunButton from '../components/RunButton';
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
-  const [products, openTodos, highOpp, latestRun] = await Promise.all([
-    prisma.product.count({ where: { active: true } }),
+  const [productList, openTodos, highOpp, latestRun] = await Promise.all([
+    prisma.product.findMany({
+      where: { active: true },
+      select: { asin: true, title: true },
+      orderBy: { createdAt: 'asc' },
+    }),
     prisma.todo.count({ where: { done: false } }),
     prisma.keyword.findMany({
       where: { classification: 'high_opportunity' },
@@ -14,6 +18,7 @@ export default async function Dashboard() {
     }),
     prisma.run.findFirst({ orderBy: { startedAt: 'desc' } }),
   ]);
+  const products = productList.length;
 
   return (
     <>
@@ -22,7 +27,7 @@ export default async function Dashboard() {
         <Stat label="Open to-dos" value={openTodos} />
         <Stat label="High-opportunity keywords" value={highOpp.length} />
         <Stat label="Last run" value={latestRun ? latestRun.startedAt.toISOString().slice(0, 10) : '—'} />
-        <RunButton />
+        <RunButton products={productList} />
       </div>
 
       <h2 style={{ fontSize: 18 }}>High-opportunity keywords — weekly movement</h2>
