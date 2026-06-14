@@ -4,6 +4,7 @@
 import { Actor, log } from 'apify';
 import { chromium } from 'playwright';
 import { runCerebro, ensureLoggedIn } from './cerebro.js';
+import { startLiveView } from './liveview.js';
 import { classifyKeywords } from './classify.js';
 import { opportunityScore, costToRank, lifecycle, recommendAction, learnFromHistory } from './analysis.js';
 import { deepCompetitorAnalysis } from './competitor-deep.js';
@@ -54,6 +55,7 @@ await Actor.main(async () => {
     headless: false,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
+  startLiveView(); // serve noVNC so a human can complete the H10 login in Live View
   const context = await browser.newContext({ storageState });
   const page = await context.newPage();
 

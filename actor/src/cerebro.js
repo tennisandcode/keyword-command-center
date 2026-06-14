@@ -1,5 +1,5 @@
 // Helium 10 Cerebro automation. Selectors verified against cerebro-new (June 2026).
-import { log } from 'apify';
+import { Actor, log } from 'apify';
 
 const CEREBRO_URL = 'https://members.helium10.com/cerebro';
 
@@ -8,6 +8,8 @@ const CEREBRO_URL = 'https://members.helium10.com/cerebro';
  * If the login page is shown, waits up to loginWaitMinutes for a human to
  * complete login through Apify Live View, polling for success.
  */
+const SIGNIN_URL = 'https://members.helium10.com/user/signin';
+
 export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
   await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(4000);
@@ -21,72 +23,56 @@ export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
     );
   }
 
-  // Automated login with stored credentials (H10_EMAIL / H10_PASSWORD).
+  // Pre-fill the signin form so the human only has to solve the reCAPTCHA and
+  // click "Log In" in Live View. (H10 login is reCAPTCHA v2 — not scriptable.)
   const email = process.env.H10_EMAIL;
   const password = process.env.H10_PASSWORD;
-  if (email && password) {
-    if (await autoLogin(page, email, password)) {
-      log.info('Automated Helium 10 login succeeded.');
-      return true;
-    }
-    log.warning('Automated login did not reach Cerebro (wrong credentials, 2FA, or changed form).');
-  } else {
-    log.warning('H10_EMAIL / H10_PASSWORD not set — cannot auto-login.');
-  }
+  if (email && password) await prefillLogin(page, email, password);
 
-  // Fallback: poll in case login is completed by other means within the window.
-  log.warning(`H10 login required — waiting up to ${loginWaitMinutes} min for a valid session…`);
+  log.warning(
+    'LOGIN NEEDED → open this run\'s "Live view" tab, solve the reCAPTCHA, and click "Log In". ' +
+    (email && password ? 'Email/password are pre-filled. ' : 'No H10_EMAIL/H10_PASSWORD set. ') +
+    `Waiting up to ${loginWaitMinutes} min…`
+  );
+  await Actor.setStatusMessage('NEEDS_LOGIN: open Live View, solve captcha, click Log In.').catch(() => {});
+
   const deadline = Date.now() + loginWaitMinutes * 60_000;
   while (Date.now() < deadline) {
-    await page.waitForTimeout(10_000);
-    if ((await sessionState(page)) === 'ok') {
-      log.info('Login detected — continuing.');
-      return true;
+    await page.waitForTimeout(5_000);
+    const url = page.url();
+    if (!/\/user\/signin/.test(url)) {
+      // The human left the signin page (submitted successfully) — confirm Cerebro.
+      await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForTimeout(3_000);
+      if ((await sessionState(page)) === 'ok') {
+        log.info('Login detected — continuing.');
+        return true;
+      }
+    } else if (email && password) {
+      // Still on signin (e.g. reloaded after a failed attempt) — keep it filled.
+      const empty = await page
+        .locator('#loginform-email')
+        .inputValue()
+        .then((v) => !v)
+        .catch(() => false);
+      if (empty) await prefillLogin(page, email, password, true);
     }
   }
   return false;
 }
 
-/** Fill and submit the Helium 10 signin form, then verify we reach Cerebro. */
-async function autoLogin(page, email, password) {
+/** Pre-fill the H10 signin form (does NOT submit — the human solves the captcha). */
+async function prefillLogin(page, email, password, alreadyOnPage = false) {
   try {
-    if (!/\/user\/signin/.test(page.url())) {
-      await page.goto('https://members.helium10.com/user/signin', { waitUntil: 'domcontentloaded' });
+    if (!alreadyOnPage && !/\/user\/signin/.test(page.url())) {
+      await page.goto(SIGNIN_URL, { waitUntil: 'domcontentloaded' });
     }
-    await page.waitForTimeout(2500);
-
-    const emailInput = page
-      .locator('input[type="email"], input[name="email"], input#email, input[name="username"]')
-      .first();
-    const passInput = page
-      .locator('input[type="password"], input[name="password"], input#password')
-      .first();
-    await emailInput.waitFor({ timeout: 15_000 });
-    await emailInput.fill(email);
-    await passInput.fill(password);
-
-    const submit = page
-      .locator('button[type="submit"], button:has-text("Sign In"), button:has-text("Log In"), button:has-text("Login")')
-      .first();
-    if (await submit.count()) await submit.click();
-    else await passInput.press('Enter');
-
-    await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-
-    // Poll for success — handles post-login redirects.
-    for (let i = 0; i < 6; i++) {
-      await page.waitForTimeout(5_000);
-      await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
-      const s = await sessionState(page);
-      if (s === 'ok') return true;
-      if (s === 'demo') {
-        throw new Error('Credentials are for a FREE Helium 10 account; a paid (Elite) plan is required.');
-      }
-    }
-    return false;
+    await page.locator('#loginform-email').waitFor({ timeout: 15_000 });
+    await page.locator('#loginform-email').fill(email);
+    await page.locator('#loginform-password').fill(password);
+    log.info('Helium 10 credentials pre-filled — solve the captcha + click Log In in Live View.');
   } catch (e) {
-    log.warning(`autoLogin error: ${e?.message ?? e}`);
-    return false;
+    log.warning(`prefillLogin error: ${e?.message ?? e}`);
   }
 }
 
