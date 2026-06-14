@@ -47,21 +47,21 @@ await Actor.main(async () => {
   const reportStore = await Actor.openKeyValueStore(REPORT_STORE);
   const storageState = (await sessionStore.getValue('storageState')) ?? undefined;
 
-  // Headful Google Chrome under xvfb so the attended Helium 10 login works in
-  // Apify Live View. A SINGLE persistent context (one window, one cookie
-  // profile) so the page the operator logs into is the same one we monitor.
-  const context = await chromium.launchPersistentContext('', {
+  // Headful Google Chrome under xvfb. Restore the FULL saved session
+  // (cookies + localStorage) via storageState so logged-in runs skip login —
+  // H10 keeps the plan/workspace context in localStorage, so cookies alone are
+  // not enough (they fall back to the Cerebro demo view).
+  const browser = await chromium.launch({
     channel: 'chrome',
     headless: false,
-    viewport: { width: 1920, height: 1080 },
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
-  startLiveView(); // serve noVNC so a human can complete the H10 login in Live View
-  // Restore a saved session (cookies) so logged-in runs skip the login entirely.
-  if (storageState?.cookies?.length) {
-    await context.addCookies(storageState.cookies).catch(() => {});
-  }
-  const page = context.pages()[0] ?? (await context.newPage());
+  startLiveView(); // serve noVNC for the (rare) interactive-login fallback
+  const context = await browser.newContext({
+    storageState: storageState || undefined,
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
 
   const loggedIn = await ensureLoggedIn(context, page, { loginWaitMinutes });
   if (!loggedIn) {
@@ -147,7 +147,7 @@ await Actor.main(async () => {
   }
 
   if (pg) await pg.end();
-  await context.close();
+  await browser.close();
 
   if (process.env.PORTAL_URL) {
     await fetch(`${process.env.PORTAL_URL}/api/runs/ingest`, {
