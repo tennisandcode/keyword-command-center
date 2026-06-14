@@ -17,11 +17,25 @@ export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
   if (state === 'demo') {
     throw new Error(
       'Logged into a FREE Helium 10 account ("demo of Cerebro" banner). ' +
-      'Log into the paid (Elite) account via Live View, then re-run.'
+      'Use the paid (Elite) account credentials, then re-run.'
     );
   }
 
-  log.warning('H10 login required — waiting for human login via Live View…');
+  // Automated login with stored credentials (H10_EMAIL / H10_PASSWORD).
+  const email = process.env.H10_EMAIL;
+  const password = process.env.H10_PASSWORD;
+  if (email && password) {
+    if (await autoLogin(page, email, password)) {
+      log.info('Automated Helium 10 login succeeded.');
+      return true;
+    }
+    log.warning('Automated login did not reach Cerebro (wrong credentials, 2FA, or changed form).');
+  } else {
+    log.warning('H10_EMAIL / H10_PASSWORD not set — cannot auto-login.');
+  }
+
+  // Fallback: poll in case login is completed by other means within the window.
+  log.warning(`H10 login required — waiting up to ${loginWaitMinutes} min for a valid session…`);
   const deadline = Date.now() + loginWaitMinutes * 60_000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(10_000);
@@ -31,6 +45,49 @@ export async function ensureLoggedIn(page, { loginWaitMinutes = 10 } = {}) {
     }
   }
   return false;
+}
+
+/** Fill and submit the Helium 10 signin form, then verify we reach Cerebro. */
+async function autoLogin(page, email, password) {
+  try {
+    if (!/\/user\/signin/.test(page.url())) {
+      await page.goto('https://members.helium10.com/user/signin', { waitUntil: 'domcontentloaded' });
+    }
+    await page.waitForTimeout(2500);
+
+    const emailInput = page
+      .locator('input[type="email"], input[name="email"], input#email, input[name="username"]')
+      .first();
+    const passInput = page
+      .locator('input[type="password"], input[name="password"], input#password')
+      .first();
+    await emailInput.waitFor({ timeout: 15_000 });
+    await emailInput.fill(email);
+    await passInput.fill(password);
+
+    const submit = page
+      .locator('button[type="submit"], button:has-text("Sign In"), button:has-text("Log In"), button:has-text("Login")')
+      .first();
+    if (await submit.count()) await submit.click();
+    else await passInput.press('Enter');
+
+    await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
+
+    // Poll for success — handles post-login redirects.
+    for (let i = 0; i < 6; i++) {
+      await page.waitForTimeout(5_000);
+      await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
+      const s = await sessionState(page);
+      if (s === 'ok') return true;
+      if (s === 'demo') {
+        throw new Error('Credentials are for a FREE Helium 10 account; a paid (Elite) plan is required.');
+      }
+    }
+    return false;
+  } catch (e) {
+    log.warning(`autoLogin error: ${e?.message ?? e}`);
+    return false;
+  }
 }
 
 async function sessionState(page) {
