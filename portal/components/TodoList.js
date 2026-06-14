@@ -16,6 +16,14 @@ export default function TodoList({ initial }) {
     });
   }
 
+  if (todos.length === 0) {
+    return (
+      <p style={{ color: '#888', fontSize: 14 }}>
+        No to-dos yet. The actor generates ranking actions after each run.
+      </p>
+    );
+  }
+
   return (
     <ul style={{ listStyle: 'none', padding: 0 }}>
       {todos.map((t) => (

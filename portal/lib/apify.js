@@ -22,6 +22,7 @@ export async function startRun(asins = []) {
 
 export async function runStatus(runId) {
   const res = await fetch(`${BASE}/actor-runs/${runId}?token=${TOKEN}`);
+  if (!res.ok) throw new Error(`Apify status failed: ${res.status} ${await res.text()}`);
   const { data } = await res.json();
   return { status: data.status, statusMessage: data.statusMessage };
 }

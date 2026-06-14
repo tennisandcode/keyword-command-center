@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/db';
+import AddProduct from '../../components/AddProduct';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +11,7 @@ export default async function ProductsPage() {
   return (
     <>
       <h2 style={{ fontSize: 18 }}>Products</h2>
-      <p style={{ fontSize: 13, color: '#666' }}>
-        Add products via POST /api/products {'{ asin, title }'} — or ask Claude to add them.
-      </p>
+      <AddProduct />
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '2px solid #e5e5e0' }}>
@@ -28,6 +27,13 @@ export default async function ProductsPage() {
               <td>{p.active ? '✓' : '–'}</td>
             </tr>
           ))}
+          {products.length === 0 && (
+            <tr>
+              <td colSpan={4} style={{ padding: 16, color: '#888' }}>
+                No products yet. Add one above to start tracking keywords.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </>

@@ -26,6 +26,13 @@ export default async function RunsPage() {
               <td>{r._count.competitors}</td>
             </tr>
           ))}
+          {runs.length === 0 && (
+            <tr>
+              <td colSpan={4} style={{ padding: 16, color: '#888' }}>
+                No runs yet. Start one from the Dashboard with <strong>▶ Run all products now</strong>.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </>

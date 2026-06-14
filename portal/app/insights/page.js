@@ -45,11 +45,20 @@ export default async function InsightsPage() {
               <td style={{ color: r.weekly > 0 ? 'green' : r.weekly < 0 ? 'crimson' : '#888' }}>
                 {r.weekly == null ? 'new' : r.weekly > 0 ? `▲ ${r.weekly}` : r.weekly < 0 ? `▼ ${-r.weekly}` : '–'}
               </td>
-              <td>{r.total ?? '—'}</td>
+              <td style={{ color: r.total > 0 ? 'green' : r.total < 0 ? 'crimson' : '#888' }}>
+                {r.total == null ? '—' : r.total > 0 ? `▲ ${r.total}` : r.total < 0 ? `▼ ${-r.total}` : '–'}
+              </td>
               <td>{r.runs}</td>
               <td>{r.classification}</td>
             </tr>
           ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={7} style={{ padding: 16, color: '#888' }}>
+                No keyword history yet. Rank movement appears here after your first completed run.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </>

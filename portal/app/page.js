@@ -50,6 +50,13 @@ export default async function Dashboard() {
               </tr>
             );
           })}
+          {highOpp.length === 0 && (
+            <tr>
+              <td colSpan={6} style={{ padding: 16, color: '#888' }}>
+                No high-opportunity keywords yet. Click <strong>▶ Run all products now</strong> (add products first on the Products tab) to populate this.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </>
