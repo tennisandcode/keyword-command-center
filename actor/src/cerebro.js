@@ -39,6 +39,13 @@ export async function ensureLoggedIn(context, page, { loginWaitMinutes = 10 } = 
   const deadline = Date.now() + loginWaitMinutes * 60_000;
   while (Date.now() < deadline) {
     await page.waitForTimeout(5_000);
+    // Diagnostic: snapshot what the operator sees in Live View (default KV store).
+    try {
+      await Actor.setValue('login-screen', await page.screenshot(), { contentType: 'image/png' });
+    } catch (e) {
+      log.warning(`login-screen capture failed: ${e?.message ?? e}`);
+    }
+    log.info(`login-wait: page is at ${page.url()}`);
     // Did any tab in this context reach a logged-in H10 page (left the signin)?
     const loggedInSomewhere = context.pages().some((p) => {
       const u = p.url();
