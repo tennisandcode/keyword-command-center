@@ -6,20 +6,32 @@
 import { spawn } from 'child_process';
 import { log } from 'apify';
 
+function run(cmd, args, name) {
+  const p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const onData = (d) => String(d).split('\n').filter(Boolean).forEach((l) => log.info(`[${name}] ${l.slice(0, 200)}`));
+  p.stdout.on('data', onData);
+  p.stderr.on('data', onData);
+  p.on('error', (e) => log.warning(`[${name}] spawn error: ${e.message}`));
+  p.on('exit', (c) => log.warning(`[${name}] exited (code ${c})`));
+  return p;
+}
+
 export function startLiveView() {
   const display = process.env.DISPLAY || ':99';
   const port = process.env.APIFY_CONTAINER_PORT || '4321';
-  try {
-    spawn('x11vnc', ['-display', display, '-forever', '-shared', '-nopw', '-auth', 'guess', '-rfbport', '5900', '-quiet'], {
-      stdio: 'ignore',
-      detached: true,
-    }).unref();
-    spawn('websockify', ['--web', '/usr/share/novnc', port, 'localhost:5900'], {
-      stdio: 'ignore',
-      detached: true,
-    }).unref();
-    log.info(`Live View (noVNC) serving on container port ${port}.`);
-  } catch (e) {
-    log.warning(`Live View failed to start: ${e?.message ?? e}`);
-  }
+  const xauth = process.env.XAUTHORITY;
+  log.info(`Live View starting — DISPLAY=${display} PORT=${port} XAUTHORITY=${xauth || '(unset)'}`);
+
+  // -auth points x11vnc at xvfb-run's cookie; fall back to "guess" if unset.
+  const authArgs = xauth ? ['-auth', xauth] : ['-auth', 'guess'];
+  run(
+    'x11vnc',
+    ['-display', display, ...authArgs, '-forever', '-shared', '-nopw', '-noxdamage', '-repeat', '-rfbport', '5900'],
+    'x11vnc'
+  );
+
+  // Give x11vnc a moment to bind :5900 before websockify proxies to it.
+  setTimeout(() => {
+    run('websockify', ['--web', '/usr/share/novnc', String(port), 'localhost:5900'], 'websockify');
+  }, 2000);
 }
