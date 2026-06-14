@@ -1,5 +1,6 @@
 // Helium 10 Cerebro automation. Selectors verified against cerebro-new (June 2026).
 import { Actor, log } from 'apify';
+import { readFileSync } from 'fs';
 
 const CEREBRO_URL = 'https://members.helium10.com/cerebro';
 
@@ -144,71 +145,74 @@ export async function runCerebro(page, asin, { minSearchVolume, rankMin, rankMax
   }
 
   await page.locator('button:has-text("Get Keywords")').click();
-  await page.waitForSelector('div[class*="datacy-rowcerebro"]', { timeout: 60_000 });
+  await page.waitForTimeout(3000);
 
-  // Filters: volume + organic-rank strike zone, then Apply.
-  const showFilters = page.locator('text=Show Filters');
-  if (await showFilters.count()) await showFilters.click();
-  await fillFilter(page, 'Search Volume', 0, String(minSearchVolume));
-  await fillFilter(page, 'Organic Rank', 0, String(rankMin));
-  await fillFilter(page, 'Organic Rank', 1, String(rankMax));
-  await page.locator('button:has-text("Apply Filters")').click();
-  await page.waitForTimeout(4000);
-
-  // Sort by search volume descending (one click on the column header).
-  await page.locator('text=Search Volume').last().click();
-  await page.waitForTimeout(2500);
-
-  // Bump rows-per-page to 100 (bottom-right selector) to minimize pagination.
-  try {
-    const rpp = page.locator('text=Rows per page:').locator('xpath=following::*[self::select or @role="combobox"][1]');
-    await rpp.click({ timeout: 5000 });
-    await page.locator('li:has-text("100"), option:has-text("100")').first().click({ timeout: 5000 });
-    await page.waitForTimeout(2500);
-  } catch { log.info('Rows-per-page selector not found — staying at default 50.'); }
-
-  // Extract across pages until maxKeywords (default 150 in v2).
-  // innerText lines: [0]=keyword [4]=IQ [5]=volume [6]=trend% [7]=bid
-  // [9]=competing [10]=CPR [11]=title density [last]=organic rank.
-  const rows = [];
-  while (rows.length < maxKeywords) {
-    const batch = await page.$$eval('div[class*="datacy-rowcerebro"]', (els) =>
-      els.map((el) => {
-        const t = el.innerText.split('\n').map((s) => s.trim()).filter(Boolean);
-        const num = (s) => Number(String(s ?? '').replace(/[^0-9.]/g, '')) || 0;
-        const trend = (() => {
-          const m = String(t[6] ?? '').match(/(-?\d+)%/);
-          return m ? Number(m[1]) * (/[↓-]|-/.test(t[6]) && !t[6].startsWith('-') ? 1 : 1) : 0;
-        })();
-        const bid = (() => {
-          const m = String(t[7] ?? '').match(/\$([\d.]+)/);
-          return m ? Number(m[1]) : null;
-        })();
-        return {
-          keyword: t[0],
-          cerebroIq: num(t[4]),
-          searchVolume: num(t[5]),
-          searchVolumeTrend: String(t[6] ?? '').includes('-') ? -Math.abs(trend) : trend,
-          suggestedBid: bid,
-          competingProducts: t[9] ?? '',
-          cpr: num(t[10]) || null,
-          titleDensity: num(t[11]),
-          organicRank: num(t[t.length - 1]),
-        };
-      })
-    );
-    rows.push(...batch);
-    if (rows.length >= maxKeywords) break;
-
-    // Next page (chevron at the pagination bar); stop if disabled/absent.
-    const next = page.locator('[aria-label="Go to next page"], button:has(svg):right-of(:text("…"))').first();
-    if (!(await next.count()) || (await next.isDisabled().catch(() => true))) break;
-    await next.click();
-    await page.waitForTimeout(3000);
+  // Dismiss the "You've searched this product before" modal — run fresh data.
+  const newSearch = page.locator('button:has-text("Run New Search")');
+  if (await newSearch.count()) {
+    await newSearch.first().click();
+    log.info(`Cerebro ${asin}: dismissed history modal, running a new search.`);
   }
 
-  log.info(`Cerebro ${asin}: ${rows.length} rows extracted (cap ${maxKeywords}).`);
-  return rows.filter((r) => r.keyword).slice(0, maxKeywords);
+  // The results table is virtualized, so export the full keyword list as CSV
+  // (the "Export Data…" control appears once results load) and parse it.
+  await page.locator('text=/Export Data/i').first().waitFor({ timeout: 120_000 });
+  await page.waitForTimeout(2500);
+  await page.locator('text=/Export Data/i').first().click();
+  await page.waitForTimeout(1200);
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 60_000 }),
+    page.locator('text=/csv/i').first().click(),
+  ]);
+  const csv = readFileSync(await download.path(), 'utf8');
+  const { header, rows: csvRows } = parseCsv(csv);
+  const idx = {};
+  header.forEach((h, i) => { idx[h.trim()] = i; });
+  const get = (r, name) => r[idx[name]];
+  const num = (v) => { const n = Number(String(v ?? '').replace(/[^0-9.\-]/g, '')); return Number.isFinite(n) ? n : 0; };
+
+  const all = csvRows.map((r) => ({
+    keyword: (get(r, 'Keyword Phrase') ?? '').trim(),
+    cerebroIq: num(get(r, 'Cerebro IQ Score')),
+    searchVolume: num(get(r, 'Search Volume')),
+    searchVolumeTrend: num(get(r, 'Search Volume Trend')),
+    suggestedBid: get(r, 'H10 PPC Sugg. Bid') ? num(get(r, 'H10 PPC Sugg. Bid')) : null,
+    competingProducts: String(get(r, 'Competing Products') ?? ''),
+    cpr: num(get(r, 'CPR')) || null,
+    titleDensity: num(get(r, 'Title Density')),
+    organicRank: num(get(r, 'Organic Rank')),
+  }));
+
+  // Filters (applied in code): volume floor + organic-rank strike zone.
+  const filtered = all
+    .filter((r) => r.keyword)
+    .filter((r) => r.searchVolume >= minSearchVolume)
+    .filter((r) => r.organicRank >= rankMin && r.organicRank <= rankMax)
+    .sort((a, b) => b.searchVolume - a.searchVolume)
+    .slice(0, maxKeywords);
+
+  log.info(`Cerebro ${asin}: ${all.length} keywords exported, ${filtered.length} after filters (vol>=${minSearchVolume}, rank ${rankMin}-${rankMax}).`);
+  return filtered;
+}
+
+/** Minimal CSV parser handling quoted fields, escaped quotes, and BOM. */
+function parseCsv(text) {
+  text = text.replace(/^﻿/, '');
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  const nonEmpty = rows.filter((r) => r.some((f) => f !== ''));
+  return { header: nonEmpty[0] ?? [], rows: nonEmpty.slice(1) };
 }
 
 async function fillFilter(page, label, indexWithinGroup, value) {

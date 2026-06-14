@@ -60,6 +60,7 @@ await Actor.main(async () => {
   const context = await browser.newContext({
     storageState: storageState || undefined,
     viewport: { width: 1920, height: 1080 },
+    acceptDownloads: true, // Cerebro keyword export is a CSV download
   });
   const page = await context.newPage();
 
@@ -111,11 +112,16 @@ await Actor.main(async () => {
     const competitorSets = [];
     const amazonPage = await context.newPage();
     for (const kw of targets) {
-      competitorSets.push(
-        deepCompetitors
-          ? await deepCompetitorAnalysis(amazonPage, kw.keyword)
-          : { keyword: kw.keyword, competitors: [], shareOfVoice: [], attackTarget: null }
-      );
+      try {
+        competitorSets.push(
+          deepCompetitors
+            ? await deepCompetitorAnalysis(amazonPage, kw.keyword)
+            : { keyword: kw.keyword, competitors: [], shareOfVoice: [], attackTarget: null }
+        );
+      } catch (e) {
+        log.warning(`Competitor analysis failed for "${kw.keyword}": ${e?.message ?? e}`);
+        competitorSets.push({ keyword: kw.keyword, competitors: [], shareOfVoice: [], attackTarget: null });
+      }
     }
     await amazonPage.close();
 
