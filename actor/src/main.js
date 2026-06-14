@@ -2,7 +2,7 @@
 // Cerebro (150 kw) → classify → score + lifecycle + learning → deep competitor
 // X-ray → PPC plan → persist (Postgres + Sheets + KV reports) → portal webhook.
 import { Actor, log } from 'apify';
-import { launchPlaywright } from 'crawlee';
+import { chromium } from 'playwright';
 import { runCerebro, ensureLoggedIn } from './cerebro.js';
 import { classifyKeywords } from './classify.js';
 import { opportunityScore, costToRank, lifecycle, recommendAction, learnFromHistory } from './analysis.js';
@@ -46,7 +46,14 @@ await Actor.main(async () => {
   const reportStore = await Actor.openKeyValueStore(REPORT_STORE);
   const storageState = (await sessionStore.getValue('storageState')) ?? undefined;
 
-  const browser = await launchPlaywright({ launchOptions: { headless: true }, useChrome: true });
+  // Headful Google Chrome under xvfb so the attended Helium 10 login works in
+  // Apify Live View. Raw Playwright (not Crawlee's incognito-wrapped browser)
+  // so newContext({ storageState }) can restore the saved session.
+  const browser = await chromium.launch({
+    channel: 'chrome',
+    headless: false,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
   const context = await browser.newContext({ storageState });
   const page = await context.newPage();
 
