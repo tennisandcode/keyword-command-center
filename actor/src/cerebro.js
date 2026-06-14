@@ -23,11 +23,23 @@ export async function ensureLoggedIn(context, page, { loginWaitMinutes = 10 } = 
     );
   }
 
-  // Pre-fill the signin form so the human only has to solve the reCAPTCHA and
-  // click "Log In" in Live View. (H10 login is reCAPTCHA v2 — not scriptable.)
+  // The H10 login uses INVISIBLE reCAPTCHA (no checkbox), so try clicking Log In
+  // ourselves — on real Chrome it often passes with no human at all.
   const email = process.env.H10_EMAIL;
   const password = process.env.H10_PASSWORD;
-  if (email && password) await prefillLogin(page, email, password);
+  if (email && password) {
+    await prefillLogin(page, email, password);
+    await clickLogin(page);
+    await page.waitForTimeout(8_000);
+    await page.goto(CEREBRO_URL, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForTimeout(3_000);
+    if ((await sessionState(page)) === 'ok') {
+      log.info('Auto-login succeeded (invisible reCAPTCHA passed).');
+      return true;
+    }
+    log.warning('Auto-login did not reach Cerebro — re-filling form for manual Live View login.');
+    await prefillLogin(page, email, password);
+  }
 
   log.warning(
     'LOGIN NEEDED → open this run\'s "Live view" tab, solve the reCAPTCHA, and click "Log In". ' +
@@ -81,9 +93,23 @@ async function prefillLogin(page, email, password, alreadyOnPage = false) {
     await page.locator('#loginform-email').waitFor({ timeout: 15_000 });
     await page.locator('#loginform-email').fill(email);
     await page.locator('#loginform-password').fill(password);
-    log.info('Helium 10 credentials pre-filled — solve the captcha + click Log In in Live View.');
+    log.info('Helium 10 credentials pre-filled.');
   } catch (e) {
     log.warning(`prefillLogin error: ${e?.message ?? e}`);
+  }
+}
+
+/** Click the "Log In" button (invisible reCAPTCHA runs on submit). */
+async function clickLogin(page) {
+  try {
+    const btn = page
+      .locator('#login-form button[type="submit"], button:has-text("Log In"), button:has-text("LOG IN")')
+      .first();
+    await btn.waitFor({ timeout: 8_000 });
+    await btn.click();
+    log.info('Clicked Log In — waiting for invisible reCAPTCHA / redirect.');
+  } catch (e) {
+    log.warning(`clickLogin error: ${e?.message ?? e}`);
   }
 }
 
