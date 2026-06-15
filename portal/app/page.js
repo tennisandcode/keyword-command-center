@@ -1,5 +1,6 @@
 import { prisma } from '../lib/db';
 import RunButton from '../components/RunButton';
+import ClearDataButton from '../components/ClearDataButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +41,7 @@ export default async function Dashboard() {
           <span style={{ fontSize: 13, color: '#999' }}>Set <code>SHEET_ID</code> to show the Google Sheet link.</span>
         )}
         <RunButton products={productList} />
+        <span style={{ marginLeft: 'auto' }}><ClearDataButton /></span>
       </div>
 
       <h2 style={{ fontSize: 18 }}>Run history</h2>
