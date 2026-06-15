@@ -22,9 +22,10 @@ export async function syncSheet({ asin, kept, newKept = kept, competitorSets, ru
 
   // All scored keywords this run → Keyword Database + Monthly Tracking (rank history).
   if (kept.length) {
-    await append('Keyword Database!A:I', kept.map((k) => [
-      date, asin, k.keyword, k.searchVolume, k.organicRank, k.cerebroIq,
-      k.titleDensity, k.isNew ? 'New' : 'Tracked', k.classification === 'high_opportunity' ? 'High opportunity' : '',
+    await append('Keyword Database!A:L', kept.map((k) => [
+      date, asin, k.keyword, k.score ?? '', k.state ?? '', k.searchVolume, k.organicRank,
+      k.cerebroIq, k.titleDensity, k.competingProducts, k.isNew ? 'New' : 'Tracked',
+      k.classification === 'high_opportunity' ? 'High opportunity' : '',
     ]));
     const month = date.slice(0, 7);
     await append('Monthly Tracking!A:D', kept.map((k) => [asin, k.keyword, month, k.organicRank]));
@@ -49,7 +50,7 @@ export async function syncSheet({ asin, kept, newKept = kept, competitorSets, ru
 }
 
 const TAB_HEADERS = {
-  'Keyword Database': ['Date', 'My ASIN', 'Keyword', 'Search Volume', 'Organic Rank', 'Cerebro IQ', 'Title Density', 'Status', 'Class'],
+  'Keyword Database': ['Date', 'My ASIN', 'Keyword', 'Opportunity Score', 'Lifecycle', 'Search Volume', 'Organic Rank', 'Cerebro IQ', 'Title Density', 'Competing Products', 'Status', 'Class'],
   'Monthly Tracking': ['My ASIN', 'Keyword', 'Month', 'Organic Rank'],
   'To-Do': ['Date', 'My ASIN', 'Keyword', 'Action', 'Priority', 'Done'],
   'Competitor Analysis': ['Date', 'My ASIN', 'Keyword', 'Rank', 'Competitor ASIN', 'Listing Link', 'Title', 'Price', 'Rating', 'Review Count'],
