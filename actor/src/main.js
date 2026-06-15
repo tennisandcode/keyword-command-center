@@ -135,9 +135,11 @@ await Actor.main(async () => {
 
     // ---- Persist -----------------------------------------------------------
     const newKeywords = scored.filter((k) => k.isNew);
-    if (pg) await db.persistRun(pg, { asin, runStartedAt, kept: newKeywords, competitorSets:
+    // Snapshot ALL scored keywords every run (rank tracking builds up); the
+    // keyword row upserts and todos de-dupe, so only new finds add todos.
+    if (pg) await db.persistRun(pg, { asin, runStartedAt, kept: scored, competitorSets:
       competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })) });
-    await syncSheet({ asin, kept: newKeywords, competitorSets:
+    await syncSheet({ asin, kept: scored, newKept: newKeywords, competitorSets:
       competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })), runStartedAt });
 
     summary.push({

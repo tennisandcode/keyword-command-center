@@ -2,7 +2,7 @@
 // Appends to: Keyword Database, Monthly Tracking, To-Do, Competitor Analysis.
 import { google } from 'googleapis';
 
-export async function syncSheet({ asin, kept, competitorSets, runStartedAt }) {
+export async function syncSheet({ asin, kept, newKept = kept, competitorSets, runStartedAt }) {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON || !process.env.SHEET_ID) return;
 
   const auth = new google.auth.GoogleAuth({
@@ -20,19 +20,22 @@ export async function syncSheet({ asin, kept, competitorSets, runStartedAt }) {
       requestBody: { values },
     });
 
+  // All scored keywords this run → Keyword Database + Monthly Tracking (rank history).
   if (kept.length) {
     await append('Keyword Database!A:I', kept.map((k) => [
       date, asin, k.keyword, k.searchVolume, k.organicRank, k.cerebroIq,
-      k.titleDensity, 'New', k.classification === 'high_opportunity' ? 'High opportunity' : '',
+      k.titleDensity, k.isNew ? 'New' : 'Tracked', k.classification === 'high_opportunity' ? 'High opportunity' : '',
     ]));
-    await append('To-Do!A:F', kept.map((k) => [
+    const month = date.slice(0, 7);
+    await append('Monthly Tracking!A:D', kept.map((k) => [asin, k.keyword, month, k.organicRank]));
+  }
+
+  // Only newly-discovered keywords → To-Do (so it doesn't pile up every run).
+  if (newKept.length) {
+    await append('To-Do!A:F', newKept.map((k) => [
       date, asin, k.keyword, k.todoAction,
       k.classification === 'high_opportunity' ? 'High' : 'Medium', 'No',
     ]));
-    // Monthly Tracking: long format (keyword, month, rank) — pivot in the
-    // sheet or Looker Studio; avoids brittle column management.
-    const month = date.slice(0, 7);
-    await append('Monthly Tracking!A:D', kept.map((k) => [asin, k.keyword, month, k.organicRank]));
   }
 
   const compRows = competitorSets.flatMap((set) =>
