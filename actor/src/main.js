@@ -75,6 +75,7 @@ await Actor.main(async () => {
   const date = runStartedAt.slice(0, 10);
   const pg = await db.connect();
   const summary = [];
+  const sheetProducts = []; // accumulate all products → one Sheet write at the end
 
   for (const { asin } of products) {
     log.info(`=== ${asin} ===`);
@@ -140,8 +141,8 @@ await Actor.main(async () => {
     // keyword row upserts and todos de-dupe, so only new finds add todos.
     if (pg) await db.persistRun(pg, { asin, runStartedAt, kept: scored, competitorSets:
       competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })) });
-    await syncSheet({ asin, kept: scored, newKept: newKeywords, competitorSets:
-      competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })), runStartedAt });
+    sheetProducts.push({ asin, scored, newKeywords,
+      competitorSets: competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })) });
 
     summary.push({
       asin, scanned: raw.length, scored: scored.length, newKeywords: newKeywords.length,
@@ -154,6 +155,10 @@ await Actor.main(async () => {
     });
     await Actor.pushData(summary.at(-1));
   }
+
+  // One Sheet write for all products: current-view tabs overwritten, Monthly
+  // Tracking appended for week-over-week history.
+  await syncSheet({ runStartedAt, products: sheetProducts });
 
   if (pg) await pg.end();
   await browser.close();
