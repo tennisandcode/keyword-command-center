@@ -107,8 +107,9 @@ await Actor.main(async () => {
     const recommendations = scored.map((k) => recommendAction(k, lifecycleMap[k.keyword]));
     const learning = learnFromHistory(doneTodos, histories);
 
-    // ---- Deep competitor X-ray on top NEW high-score keywords ------------
-    const targets = scored.filter((k) => k.isNew && k.score >= 55).slice(0, maxCompetitorLookups);
+    // ---- Deep competitor X-ray on the top high-score keywords (every run, so
+    // competitor data + listing links stay fresh) ----
+    const targets = scored.filter((k) => k.score >= 55).slice(0, maxCompetitorLookups);
     const competitorSets = [];
     const amazonPage = await context.newPage();
     for (const kw of targets) {
