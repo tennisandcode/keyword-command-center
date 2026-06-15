@@ -1,103 +1,76 @@
 import { prisma } from '../lib/db';
 import RunButton from '../components/RunButton';
-import { h10SessionStatus } from '../lib/h10';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Dashboard() {
-  const [productList, openTodos, highOpp, latestRun, h10] = await Promise.all([
+  const [productList, runs] = await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       select: { asin: true, title: true },
       orderBy: { createdAt: 'asc' },
     }),
-    prisma.todo.count({ where: { done: false } }),
-    prisma.keyword.findMany({
-      where: { classification: 'high_opportunity' },
-      include: { snapshots: { orderBy: { id: 'desc' }, take: 2 } },
-      take: 20,
+    prisma.run.findMany({
+      orderBy: { startedAt: 'desc' },
+      take: 50,
+      include: { _count: { select: { snapshots: true, competitors: true } } },
     }),
-    prisma.run.findFirst({ orderBy: { startedAt: 'desc' } }),
-    h10SessionStatus(),
   ]);
-  const products = productList.length;
+
+  const sheetId = process.env.SHEET_ID;
+  const sheetUrl = sheetId ? `https://docs.google.com/spreadsheets/d/${sheetId}/edit` : null;
 
   return (
     <>
-      <H10Badge status={h10} />
-      <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
-        <Stat label="Active products" value={products} />
-        <Stat label="Open to-dos" value={openTodos} />
-        <Stat label="High-opportunity keywords" value={highOpp.length} />
-        <Stat label="Last run" value={latestRun ? latestRun.startedAt.toISOString().slice(0, 10) : '—'} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+        {sheetUrl ? (
+          <a
+            href={sheetUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '11px 20px', background: '#0a7f3f', color: '#fff',
+              borderRadius: 8, fontSize: 14, fontWeight: 600, textDecoration: 'none',
+            }}
+          >
+            📊 Open Google Sheet
+          </a>
+        ) : (
+          <span style={{ fontSize: 13, color: '#999' }}>Set <code>SHEET_ID</code> to show the Google Sheet link.</span>
+        )}
         <RunButton products={productList} />
       </div>
 
-      <h2 style={{ fontSize: 18 }}>High-opportunity keywords — weekly movement</h2>
+      <h2 style={{ fontSize: 18 }}>Run history</h2>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>
           <tr style={{ textAlign: 'left', borderBottom: '2px solid #e5e5e0' }}>
-            <th style={{ padding: 8 }}>Keyword</th><th>ASIN</th><th>Volume</th>
-            <th>Rank</th><th>Δ vs prior</th><th>Status</th>
+            <th style={{ padding: 8 }}>Date</th><th>ASIN</th><th>Keywords</th><th>Competitors</th><th>Sheet</th>
           </tr>
         </thead>
         <tbody>
-          {highOpp.map((k) => {
-            const [cur, prev] = k.snapshots;
-            const delta = cur && prev ? prev.organicRank - cur.organicRank : null;
+          {runs.map((r) => {
+            const rowUrl = sheetUrl ? `${sheetUrl}?run=${r.startedAt.toISOString().slice(0, 10)}#gid=0` : null;
             return (
-              <tr key={k.id} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: 8 }}>{k.keyword}</td>
-                <td>{k.asin}</td>
-                <td>{cur?.searchVolume?.toLocaleString() ?? '—'}</td>
-                <td>#{cur?.organicRank ?? '—'}</td>
-                <td style={{ color: delta > 0 ? 'green' : delta < 0 ? 'crimson' : '#888' }}>
-                  {delta === null ? 'new' : delta > 0 ? `▲ ${delta}` : delta < 0 ? `▼ ${-delta}` : '–'}
-                </td>
-                <td>{k.status}</td>
+              <tr key={r.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: 8 }}>{r.startedAt.toISOString().slice(0, 16).replace('T', ' ')}</td>
+                <td style={{ fontFamily: 'monospace' }}>{r.asin}</td>
+                <td>{r._count.snapshots}</td>
+                <td>{r._count.competitors}</td>
+                <td>{rowUrl ? <a href={rowUrl} target="_blank" rel="noreferrer">📊 Open</a> : <span style={{ color: '#aaa' }}>—</span>}</td>
               </tr>
             );
           })}
-          {highOpp.length === 0 && (
+          {runs.length === 0 && (
             <tr>
-              <td colSpan={6} style={{ padding: 16, color: '#888' }}>
-                No high-opportunity keywords yet. Click <strong>▶ Run all products now</strong> (add products first on the Products tab) to populate this.
+              <td colSpan={5} style={{ padding: 16, color: '#888' }}>
+                No runs yet — click <strong>▶ Run all products now</strong> (add products on the Products tab first).
               </td>
             </tr>
           )}
         </tbody>
       </table>
     </>
-  );
-}
-
-function H10Badge({ status }) {
-  const ok = status?.connected;
-  const when = ok && status.savedAt ? `${new Date(status.savedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC` : null;
-  return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', marginBottom: 16,
-        borderRadius: 8, fontSize: 13,
-        background: ok ? '#ecfdf3' : '#fef3f2',
-        border: `1px solid ${ok ? '#abefc6' : '#fecdca'}`,
-        color: ok ? '#067647' : '#b42318',
-      }}
-    >
-      <span style={{ width: 9, height: 9, borderRadius: 99, background: ok ? '#16a34a' : '#d92d20' }} />
-      <strong>Helium 10:</strong>
-      {ok
-        ? <span>Connected — session saved{when ? ` (${when})` : ''}. Runs reuse it; no login needed.</span>
-        : <span>Not connected — start a run and sign in once via Live View to save the session.</span>}
-    </div>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <div style={{ background: '#fff', border: '1px solid #e5e5e0', borderRadius: 8, padding: '12px 20px' }}>
-      <div style={{ fontSize: 24, fontWeight: 600 }}>{value}</div>
-      <div style={{ fontSize: 12, color: '#666' }}>{label}</div>
-    </div>
   );
 }
