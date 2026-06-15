@@ -10,6 +10,7 @@ export async function syncSheet({ asin, kept, competitorSets, runStartedAt }) {
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
   const sheets = google.sheets({ version: 'v4', auth });
+  await ensureTabs(sheets, process.env.SHEET_ID, ['Keyword Database', 'Monthly Tracking', 'To-Do', 'Competitor Analysis']);
   const date = runStartedAt.slice(0, 10);
   const append = (range, values) =>
     sheets.spreadsheets.values.append({
@@ -40,4 +41,17 @@ export async function syncSheet({ asin, kept, competitorSets, runStartedAt }) {
     ])
   );
   if (compRows.length) await append('Competitor Analysis!A:I', compRows);
+}
+
+/** Create any missing tabs so appends don't fail on a blank spreadsheet. */
+async function ensureTabs(sheets, spreadsheetId, tabs) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existing = new Set((meta.data.sheets || []).map((s) => s.properties.title));
+  const toAdd = tabs.filter((t) => !existing.has(t));
+  if (toAdd.length) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: { requests: toAdd.map((title) => ({ addSheet: { properties: { title } } })) },
+    });
+  }
 }
