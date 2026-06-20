@@ -82,3 +82,20 @@ model Competitor {
 
   @@map("competitors")
 }
+
+// All keywords the ASIN ranks for (top 100 placements, or top 150 if volume >= 3000).
+// Overwritten each run by the actor (current view); the dashboard's AI sorts/filters it.
+model RankedKeyword {
+  id           Int      @id @default(autoincrement())
+  asin         String
+  keyword      String
+  organicRank  Int      @map("organic_rank")
+  searchVolume Int      @map("search_volume")
+  cerebroIq    Int?     @map("cerebro_iq")
+  titleDensity Int?     @map("title_density")
+  competing    String?
+  capturedAt   DateTime @map("captured_at")
+
+  @@unique([asin, keyword])
+  @@map("ranked_keywords")
+}

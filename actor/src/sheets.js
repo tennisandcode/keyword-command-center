@@ -8,6 +8,7 @@ const TAB_HEADERS = {
   'Monthly Tracking': ['My ASIN', 'Keyword', 'Month', 'Organic Rank'],
   'To-Do': ['Date', 'My ASIN', 'Keyword', 'Action', 'Priority', 'Done'],
   'Competitor Analysis': ['Date', 'My ASIN', 'Keyword', 'Rank', 'Competitor ASIN', 'Listing Link', 'Title', 'Price', 'Rating', 'Review Count'],
+  'All Ranked Keywords': ['Date', 'My ASIN', 'Keyword', 'Organic Rank', 'Search Volume', 'Cerebro IQ', 'Title Density', 'Competing Products'],
 };
 
 export async function syncSheet({ runStartedAt, products }) {
@@ -57,6 +58,12 @@ export async function syncSheet({ runStartedAt, products }) {
       date, p.asin, set.keyword, i + 1, c.asin, `https://www.amazon.com/dp/${c.asin}`,
       c.title, c.price, c.rating, c.reviewCount,
     ]))));
+
+  // All Ranked Keywords — every keyword the ASIN ranks for (top 100, or top 150
+  // if vol >= 3000). Overwrite each run (current view; AI sorts it in the portal).
+  await overwrite('All Ranked Keywords', products.flatMap((p) => (p.ranked || []).map((r) => [
+    date, p.asin, r.keyword, r.organicRank, r.searchVolume, r.cerebroIq, r.titleDensity, r.competingProducts,
+  ])));
 }
 
 /** Create any missing tabs (with a header row) so writes land cleanly. */

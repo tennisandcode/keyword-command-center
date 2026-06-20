@@ -80,3 +80,37 @@ export async function persistRun(client, { asin, runStartedAt, kept, competitorS
     }
   }
 }
+
+/** All ranked keywords for an ASIN — overwritten each run (current view). Self-creates
+ *  its table so it works even before the portal's prisma db push. */
+export async function persistRanked(client, { asin, runStartedAt, ranked }) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ranked_keywords (
+      id SERIAL PRIMARY KEY,
+      asin TEXT NOT NULL,
+      keyword TEXT NOT NULL,
+      organic_rank INTEGER NOT NULL,
+      search_volume INTEGER NOT NULL,
+      cerebro_iq INTEGER,
+      title_density INTEGER,
+      competing TEXT,
+      captured_at TIMESTAMP NOT NULL,
+      UNIQUE (asin, keyword)
+    )`);
+  await client.query('DELETE FROM ranked_keywords WHERE asin = $1', [asin]);
+  for (let i = 0; i < ranked.length; i += 500) {
+    const chunk = ranked.slice(i, i + 500);
+    const values = [];
+    const params = [];
+    chunk.forEach((r, j) => {
+      const b = j * 8;
+      values.push(`($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8})`);
+      params.push(asin, r.keyword, r.organicRank, r.searchVolume, r.cerebroIq ?? null, r.titleDensity ?? null, String(r.competingProducts ?? ''), runStartedAt);
+    });
+    await client.query(
+      `INSERT INTO ranked_keywords (asin, keyword, organic_rank, search_volume, cerebro_iq, title_density, competing, captured_at)
+       VALUES ${values.join(',')} ON CONFLICT (asin, keyword) DO NOTHING`,
+      params
+    );
+  }
+}

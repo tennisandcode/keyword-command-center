@@ -79,7 +79,7 @@ await Actor.main(async () => {
 
   for (const { asin } of products) {
     log.info(`=== ${asin} ===`);
-    const raw = await runCerebro(page, asin, { minSearchVolume, rankMin, rankMax, maxKeywords });
+    const { scored: raw, ranked } = await runCerebro(page, asin, { minSearchVolume, rankMin, rankMax, maxKeywords });
 
     const known = pg ? await db.knownKeywords(pg, asin) : new Set();
     const histories = pg ? await db.rankHistories(pg, asin) : {};
@@ -141,7 +141,8 @@ await Actor.main(async () => {
     // keyword row upserts and todos de-dupe, so only new finds add todos.
     if (pg) await db.persistRun(pg, { asin, runStartedAt, kept: scored, competitorSets:
       competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })) });
-    sheetProducts.push({ asin, scored, newKeywords,
+    if (pg) await db.persistRanked(pg, { asin, runStartedAt, ranked });
+    sheetProducts.push({ asin, scored, newKeywords, ranked,
       competitorSets: competitorSets.map((s) => ({ keyword: s.keyword, competitors: s.competitors })) });
 
     summary.push({

@@ -10,6 +10,7 @@ export default function RootLayout({ children }) {
           <strong>⌁ Keyword Command Center</strong>
           <nav style={{ display: 'flex', gap: 16, fontSize: 14 }}>
             <a href="/">Dashboard</a>
+            <a href="/all-keywords">All Keywords</a>
             <a href="/products">Products</a>
             {sheetUrl && <a href={sheetUrl} target="_blank" rel="noreferrer">Google Sheet ↗</a>}
           </nav>

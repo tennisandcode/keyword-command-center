@@ -191,8 +191,16 @@ export async function runCerebro(page, asin, { minSearchVolume, rankMin, rankMax
     .sort((a, b) => b.searchVolume - a.searchVolume)
     .slice(0, maxKeywords);
 
-  log.info(`Cerebro ${asin}: ${all.length} keywords exported, ${filtered.length} after filters (vol>=${minSearchVolume}, rank ${rankMin}-${rankMax}).`);
-  return filtered;
+  // Ranked view (separate from the strike-zone): every keyword the ASIN ranks
+  // for within the top 100 placements, OR within 150 for high-volume (>=3000)
+  // keywords. Both large and small volume; sorted best placement first.
+  const ranked = all
+    .filter((r) => r.keyword && r.organicRank >= 1)
+    .filter((r) => r.organicRank <= 100 || (r.searchVolume >= 3000 && r.organicRank <= 150))
+    .sort((a, b) => a.organicRank - b.organicRank);
+
+  log.info(`Cerebro ${asin}: ${all.length} exported, ${filtered.length} strike-zone, ${ranked.length} ranked (<=100, or >=3000 vol & <=150).`);
+  return { scored: filtered, ranked };
 }
 
 /** Minimal CSV parser handling quoted fields, escaped quotes, and BOM. */
